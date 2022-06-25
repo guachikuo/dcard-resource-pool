@@ -94,13 +94,12 @@ func (p *pool[T]) NumIdle() int {
 func (p *pool[T]) close(ctx context.Context) {
 	p.closeOnce.Do(
 		func() {
-			resource := p.resource
-			p.resource = nil
-
-			close(resource)
-			for r := range resource {
+			close(p.resource)
+			for r := range p.resource {
 				p.closer(ctx, r.value)
 			}
+
+			p.resource = nil
 		},
 	)
 }
