@@ -7,9 +7,16 @@ import (
 	"time"
 )
 
+type resource[T any] struct {
+	value T
+	// the time when this resource is created
+	createdAt time.Time
+}
+
 type pool[T any] struct {
 	mutex    sync.RWMutex
-	resource chan T
+	resource chan resource[T]
+	closer   func(context.Context, T)
 }
 
 type Pool[T any] interface {
@@ -23,15 +30,34 @@ type Pool[T any] interface {
 
 func New[T any](
 	creator func(context.Context) (T, error),
+	closer func(context.Context, T),
 	maxIdleSize int,
 	maxIdleTime time.Duration,
-) Pool[T] {
-	return &pool[T]{
-		resource: make(chan T, maxIdleSize),
+) (Pool[T], error) {
+	ctx := context.Background()
+
+	// init
+	p := &pool[T]{
+		resource: make(chan resource[T], maxIdleSize),
 	}
+
+	for i := 0; i < maxIdleSize; i++ {
+		r, err := creator(ctx)
+		if err != nil {
+			p.close(ctx)
+			return nil, err
+		}
+
+		p.resource <- resource[T]{
+			value:     r,
+			createdAt: time.Now(),
+		}
+	}
+
+	return p, nil
 }
 
-func (p *pool[T]) Acquire(context.Context) (T, error) {
+func (p *pool[T]) Acquire(ctx context.Context) (T, error) {
 	return *new(T), fmt.Errorf("not implemented yet")
 }
 
@@ -40,5 +66,25 @@ func (p *pool[T]) Release(T) {
 }
 
 func (p *pool[T]) NumIdle() int {
-	return 0
+	p.mutex.RLock()
+	num := len(p.resource)
+	p.mutex.RUnlock()
+	return num
+}
+
+func (p *pool[T]) close(ctx context.Context) {
+	p.mutex.Lock()
+	resource := p.resource
+	p.resource = nil
+	p.mutex.Unlock()
+
+	if resource == nil {
+		return
+	}
+
+	close(resource)
+	for r := range resource {
+		p.closer(ctx, r.value)
+	}
+	return
 }
