@@ -14,16 +14,20 @@ type resource[T any] struct {
 }
 
 type pool[T any] struct {
-	mutex    sync.RWMutex
+	mutex     sync.RWMutex
+	closeOnce sync.Once
+
 	resource chan resource[T]
-	closer   func(context.Context, T)
+
+	creator func(context.Context) (T, error)
+	closer  func(context.Context, T)
 }
 
 type Pool[T any] interface {
 	// This creates or returns a ready-to-use item from the resource pool
 	Acquire(context.Context) (T, error)
 	// This releases an active resource back to the resource pool
-	Release(T)
+	Release(context.Context, T)
 	// This returns the number of idle items
 	NumIdle() int
 }
@@ -39,6 +43,9 @@ func New[T any](
 	// init
 	p := &pool[T]{
 		resource: make(chan resource[T], maxIdleSize),
+
+		creator: creator,
+		closer:  closer,
 	}
 
 	for i := 0; i < maxIdleSize; i++ {
@@ -61,30 +68,38 @@ func (p *pool[T]) Acquire(ctx context.Context) (T, error) {
 	return *new(T), fmt.Errorf("not implemented yet")
 }
 
-func (p *pool[T]) Release(T) {
-	return
+func (p *pool[T]) Release(ctx context.Context, r T) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	resource := resource[T]{
+		value:     r,
+		createdAt: time.Now(),
+	}
+
+	select {
+	case p.resource <- resource:
+	default:
+		p.closer(ctx, r)
+	}
 }
 
 func (p *pool[T]) NumIdle() int {
 	p.mutex.RLock()
-	num := len(p.resource)
-	p.mutex.RUnlock()
-	return num
+	defer p.mutex.RUnlock()
+
+	return len(p.resource)
 }
 
 func (p *pool[T]) close(ctx context.Context) {
-	p.mutex.Lock()
-	resource := p.resource
-	p.resource = nil
-	p.mutex.Unlock()
+	p.closeOnce.Do(
+		func() {
+			close(p.resource)
+			for r := range p.resource {
+				p.closer(ctx, r.value)
+			}
 
-	if resource == nil {
-		return
-	}
-
-	close(resource)
-	for r := range resource {
-		p.closer(ctx, r.value)
-	}
-	return
+			p.resource = nil
+		},
+	)
 }
