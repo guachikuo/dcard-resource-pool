@@ -2,7 +2,6 @@ package pool
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 )
@@ -13,45 +12,67 @@ type resource[T any] struct {
 	createdAt time.Time
 }
 
+type tool[T any] struct {
+	creator   func(context.Context) (T, error)
+	destroyer func(context.Context, T)
+}
+
 type pool[T any] struct {
-	mutex     sync.RWMutex
-	closeOnce sync.Once
+	mutex sync.RWMutex
 
 	resource chan resource[T]
 
-	creator func(context.Context) (T, error)
-	closer  func(context.Context, T)
-}
+	tool tool[T]
 
-type Pool[T any] interface {
-	// This creates or returns a ready-to-use item from the resource pool
-	Acquire(context.Context) (T, error)
-	// This releases an active resource back to the resource pool
-	Release(context.Context, T)
-	// This returns the number of idle items
-	NumIdle() int
+	maxIdleTime time.Duration
 }
 
 func New[T any](
 	creator func(context.Context) (T, error),
-	closer func(context.Context, T),
+	destroyer func(context.Context, T),
 	maxIdleSize int,
 	maxIdleTime time.Duration,
 ) (Pool[T], error) {
 	ctx := context.Background()
 
+	if creator == nil {
+		return nil, ErrCreatorNotExist
+	}
+
+	if destroyer == nil {
+		return nil, ErrDestroyerNotExist
+	}
+
+	if maxIdleSize <= 0 {
+		return nil, ErrInvalidMaxIdleSize
+	}
+
+	if maxIdleTime < time.Duration(0) {
+		return nil, ErrInvalidMaxIdleTime
+	}
+
 	// init
 	p := &pool[T]{
 		resource: make(chan resource[T], maxIdleSize),
 
-		creator: creator,
-		closer:  closer,
+		tool: tool[T]{
+			creator:   creator,
+			destroyer: destroyer,
+		},
+
+		maxIdleTime: maxIdleTime,
 	}
 
 	for i := 0; i < maxIdleSize; i++ {
-		r, err := creator(ctx)
+		r, err := p.create(ctx)
 		if err != nil {
-			p.close(ctx)
+			// release created resource
+			close(p.resource)
+			for r := range p.resource {
+				p.destroy(ctx, r.value)
+			}
+			p.resource = nil
+
 			return nil, err
 		}
 
@@ -65,12 +86,23 @@ func New[T any](
 }
 
 func (p *pool[T]) Acquire(ctx context.Context) (T, error) {
-	return *new(T), fmt.Errorf("not implemented yet")
+	for {
+		select {
+		case resource := <-p.resource:
+			if resource.createdAt.Add(p.maxIdleTime).Before(time.Now()) {
+				p.destroy(ctx, resource.value)
+				continue
+			}
+			return resource.value, nil
+		default:
+			return p.create(ctx)
+		}
+	}
 }
 
 func (p *pool[T]) Release(ctx context.Context, r T) {
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
 
 	resource := resource[T]{
 		value:     r,
@@ -79,8 +111,10 @@ func (p *pool[T]) Release(ctx context.Context, r T) {
 
 	select {
 	case p.resource <- resource:
+	// when the channel is full, default will be executed,
+	// then we need to destroy the resource
 	default:
-		p.closer(ctx, r)
+		p.destroy(ctx, r)
 	}
 }
 
@@ -91,15 +125,10 @@ func (p *pool[T]) NumIdle() int {
 	return len(p.resource)
 }
 
-func (p *pool[T]) close(ctx context.Context) {
-	p.closeOnce.Do(
-		func() {
-			close(p.resource)
-			for r := range p.resource {
-				p.closer(ctx, r.value)
-			}
+func (p *pool[T]) create(ctx context.Context) (T, error) {
+	return p.tool.creator(ctx)
+}
 
-			p.resource = nil
-		},
-	)
+func (p *pool[T]) destroy(ctx context.Context, r T) {
+	p.tool.destroyer(ctx, r)
 }
