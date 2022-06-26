@@ -12,13 +12,17 @@ type resource[T any] struct {
 	createdAt time.Time
 }
 
+type tool[T any] struct {
+	creator   func(context.Context) (T, error)
+	destroyer func(context.Context, T)
+}
+
 type pool[T any] struct {
 	mutex sync.RWMutex
 
 	resource chan resource[T]
 
-	creator   func(context.Context) (T, error)
-	destroyer func(context.Context, T)
+	tool tool[T]
 
 	maxIdleTime time.Duration
 }
@@ -43,12 +47,18 @@ func New[T any](
 		return nil, ErrInvalidMaxIdleSize
 	}
 
+	if maxIdleTime < time.Duration(0) {
+		return nil, ErrInvalidMaxIdleTime
+	}
+
 	// init
 	p := &pool[T]{
 		resource: make(chan resource[T], maxIdleSize),
 
-		creator:   creator,
-		destroyer: destroyer,
+		tool: tool[T]{
+			creator:   creator,
+			destroyer: destroyer,
+		},
 
 		maxIdleTime: maxIdleTime,
 	}
@@ -116,9 +126,9 @@ func (p *pool[T]) NumIdle() int {
 }
 
 func (p *pool[T]) create(ctx context.Context) (T, error) {
-	return p.creator(ctx)
+	return p.tool.creator(ctx)
 }
 
 func (p *pool[T]) destroy(ctx context.Context, r T) {
-	p.destroyer(ctx, r)
+	p.tool.destroyer(ctx, r)
 }

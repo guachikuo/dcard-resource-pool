@@ -11,6 +11,8 @@ var (
 	ErrDestroyerNotExist = fmt.Errorf("you must provide a destroyer")
 
 	ErrInvalidMaxIdleSize = fmt.Errorf("invalid maxIdleSize")
+
+	ErrInvalidMaxIdleTime = fmt.Errorf("invalid maxIdleTime")
 )
 
 type Pool[T any] interface {
