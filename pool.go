@@ -66,6 +66,8 @@ func New[T any](
 	for i := 0; i < maxIdleSize; i++ {
 		r, err := p.create(ctx)
 		if err != nil {
+			// something wrong happens, and we need to return error
+			// before doing so, we will destroy all the resources in the pool
 			p.close(ctx)
 			return nil, err
 		}
@@ -82,12 +84,15 @@ func New[T any](
 func (p *pool[T]) Acquire(ctx context.Context) (T, error) {
 	for {
 		select {
+		// get a resource from the pool, and check if it is alive for more than maxIdleTime
+		// if yes, destroy it, and find the next one
 		case resource := <-p.resources:
 			if resource.createdAt.Add(p.maxIdleTime).Before(time.Now()) {
 				p.destroy(ctx, resource.value)
 				continue
 			}
 			return resource.value, nil
+		// if no resources are in the pool, we will directly create a new one
 		default:
 			return p.create(ctx)
 		}
