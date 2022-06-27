@@ -47,7 +47,7 @@ func New[T any](
 		return nil, ErrInvalidMaxIdleSize
 	}
 
-	if maxIdleTime < time.Duration(0) {
+	if maxIdleTime <= time.Duration(0) {
 		return nil, ErrInvalidMaxIdleTime
 	}
 
