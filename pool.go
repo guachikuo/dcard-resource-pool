@@ -131,7 +131,7 @@ func (p *pool[T]) close(ctx context.Context) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
-	// release created resource
+	// destroy created resource
 	close(p.resource)
 	for r := range p.resource {
 		p.destroy(ctx, r.value)
