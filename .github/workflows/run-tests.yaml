@@ -28,4 +28,7 @@ jobs:
           go-version: 1.18
 
       - name: Run all unit tests
-        run: make run-tests
+        run: make run-u-tests
+      
+      - name: Run integration tests
+        run: make run-i-tests
