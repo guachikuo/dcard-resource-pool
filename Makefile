@@ -1,2 +1,2 @@
 run-tests:
-	go run tool/run-tests/main.go
+	go run tool/run-unit-tests/main.go
