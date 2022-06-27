@@ -66,13 +66,7 @@ func New[T any](
 	for i := 0; i < maxIdleSize; i++ {
 		r, err := p.create(ctx)
 		if err != nil {
-			// release created resource
-			close(p.resource)
-			for r := range p.resource {
-				p.destroy(ctx, r.value)
-			}
-			p.resource = nil
-
+			p.close(ctx)
 			return nil, err
 		}
 
@@ -131,4 +125,15 @@ func (p *pool[T]) create(ctx context.Context) (T, error) {
 
 func (p *pool[T]) destroy(ctx context.Context, r T) {
 	p.tool.destroyer(ctx, r)
+}
+
+func (p *pool[T]) close(ctx context.Context) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	// release created resource
+	close(p.resource)
+	for r := range p.resource {
+		p.destroy(ctx, r.value)
+	}
 }
