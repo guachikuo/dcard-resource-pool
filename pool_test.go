@@ -85,14 +85,14 @@ func (p *poolSuite) TestNew() {
 			err:         ErrInvalidMaxIdleTime,
 		},
 		{
-			desc: "error ocurred when creating resource",
+			desc: "error ocurred when creating resources",
 			creator: func(context.Context) (any, error) {
-				return *new(any), fmt.Errorf("error ocurred when creating resource")
+				return *new(any), fmt.Errorf("error ocurred when creating resources")
 			},
 			destroyer:   func(context.Context, any) {},
 			maxIdleSize: 10,
 			maxIdleTime: time.Duration(1),
-			err:         fmt.Errorf("error ocurred when creating resource"),
+			err:         fmt.Errorf("error ocurred when creating resources"),
 		},
 		{
 			desc:        "success",
@@ -142,8 +142,8 @@ func (p *poolSuite) TestAcquireReturnReadyToUseResource() {
 func (p *poolSuite) TestAcquireReturnNewResource() {
 	pool := p.NewAny()
 
-	// sleep 1 second,
-	// waiting for resource in pool is alive for more than maxIdleTime
+	// sleep 1 second
+	// waiting for resources in pool to be alive for more than maxIdleTime
 	time.Sleep(time.Second)
 
 	t, err := pool.Acquire(mockCTX)
@@ -227,7 +227,8 @@ func (p *poolSuite) TestByRunningSmallIntegration() {
 	wg.Wait()
 
 	// acquire but not release : 100*(2/3)
-	// acquire and release : 100*(1/3), but only 10 resource would be in the pool
+	// acquire and release : 100*(1/3)
+	// but only 10 resources would be in the pool
 	num = pool.NumIdle()
 	p.Require().Equal(10, num)
 }
