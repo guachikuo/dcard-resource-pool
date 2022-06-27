@@ -35,7 +35,7 @@ func main() {
 			fmt.Println("found :", path)
 			fmt.Println("start running :", dir)
 
-			cmd := exec.Command("go", "test")
+			cmd := exec.Command("go", "test", "--race")
 			cmd.Dir = dir
 
 			var stdBuffer bytes.Buffer
