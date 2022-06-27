@@ -16,10 +16,10 @@ var (
 )
 
 type Pool[T any] interface {
-	// This creates or returns a ready-to-use item from the resource pool
+	// this creates or returns a ready-to-use resource from the resource pool
 	Acquire(context.Context) (T, error)
-	// This releases an active resource back to the resource pool
+	// this releases an active resource back to the resource pool
 	Release(context.Context, T)
-	// This returns the number of idle items
+	// this returns the number of idle resources
 	NumIdle() int
 }

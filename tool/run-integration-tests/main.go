@@ -155,7 +155,8 @@ func main() {
 	wg.Wait()
 
 	// acquire but not release : 100*(2/3)
-	// acquire and release : 100*(1/3), but only 20 resource would be in the pool
+	// acquire and release : 100*(1/3)
+	// but only 20 resources would be in the pool
 	if num := pool.NumIdle(); num != 20 {
 		log.Fatal(fmt.Errorf("unexpected NumIdle : %d", num))
 		return
